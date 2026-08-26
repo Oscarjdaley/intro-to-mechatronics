@@ -1,1 +1,78 @@
+// A2 Part C v2: countdown display controlled from Serial and a button.
+// Similar output behaviour to the other Part C files, with different names/order.
+// The SSD is assumed to be active-low through the segment wiring.
+// Before integrating this file, write down:
+// - whether the SSD wiring is active-low or active-high,
+// - which pins are already used by the other parts,
+// - which value the display should show in the final system,
+// - whether Serial input remains useful after integration,
+// - what each segment resistor does,
+// - and how the display should behave when idle.
 
+int segPins[7] = {4, 5, 6, 7, 8, 9, 10};
+const int buttonPin = 2;
+
+int systemState = 9;          // number currently shown
+int sharedValue = 9;          // countdown start value
+unsigned long lastUpdate = 0; // countdown tick timing
+
+bool countdownActive = false;
+bool buttonWasHigh = false;
+int digitMap[10][7] = {
+  {1,1,1,1,1,1,0}, {0,1,1,0,0,0,0}, {1,1,0,1,1,0,1},
+  {1,1,1,1,0,0,1}, {0,1,1,0,0,1,1}, {1,0,1,1,0,1,1},
+  {1,0,1,1,1,1,1}, {1,1,1,0,0,0,0}, {1,1,1,1,1,1,1},
+  {1,1,1,0,0,1,1}
+};
+
+void setup() {
+  for (int k = 0; k < 7; k++) pinMode(segPins[k], OUTPUT);
+  pinMode(buttonPin, INPUT);
+  Serial.begin(9600);
+  Serial.println("Send digit for countdown start, press button to begin.");
+}
+
+void loop() {
+  handleSerialStartValue();
+  handleStartButton();
+  serviceCountdown();
+  showNumber(systemState);
+}
+
+void handleSerialStartValue() {
+  if (Serial.available() == 0) return;
+  char c = Serial.read();
+  if (c >= '0' && c <= '9') {
+    sharedValue = c - '0';
+    systemState = sharedValue;
+  }
+}
+
+void handleStartButton() {
+  bool buttonHigh = digitalRead(buttonPin) == HIGH;
+  if (buttonHigh && !buttonWasHigh) {
+    countdownActive = true;
+    systemState = sharedValue;
+    lastUpdate = millis();
+    Serial.println("countdown started");
+  }
+  buttonWasHigh = buttonHigh;
+}
+
+void serviceCountdown() {
+  if (!countdownActive) return;
+  if (millis() - lastUpdate >= 1000) {
+    lastUpdate = millis();
+    if (systemState > 0) systemState--;
+    else countdownActive = false;
+  }
+}
+
+void showNumber(int value) {
+  value = constrain(value, 0, 9);
+  for (int s = 0; s < 7; s++) digitalWrite(segPins[s], !digitMap[value][s]);
+}
+
+void blankDisplay() {
+  for (int s = 0; s < 7; s++) digitalWrite(segPins[s], HIGH);
+}
