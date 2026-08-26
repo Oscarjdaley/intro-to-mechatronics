@@ -1,3 +1,12 @@
+Code Summary
+  Timer that runs for as long as you hold down the button. 
+  Maximum of 9 seconds, holding for >9s; print release button message
+  When timer runs down, light show with rgb 
+  Potentiometer controls brightness 
+  cancel button clears the board, resets system 
+  Various status updates along the way to inform user 
+
+
 // Part A
 const int armButtonPin = 2;
 const int cancelButtonPin = 11;
