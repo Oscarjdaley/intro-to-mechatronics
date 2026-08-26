@@ -9,3 +9,13 @@ PART B SET UP QUESTIONS
 
 
 PART C SET UP QUESTIONS
+// A2 Part C v2: countdown display controlled from Serial and a button.
+// Similar output behaviour to the other Part C files, with different names/order.
+// The SSD is assumed to be active-low through the segment wiring.
+// Before integrating this file, write down:
+// - whether the SSD wiring is active-low or active-high,
+// - which pins are already used by the other parts,
+// - which value the display should show in the final system,
+// - whether Serial input remains useful after integration,
+// - what each segment resistor does,
+// - and how the display should behave when idle.
