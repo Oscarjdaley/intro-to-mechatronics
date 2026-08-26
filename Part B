@@ -7,9 +7,9 @@
 // - and what calculation explains the LED resistor choice.
 
 
-const int redPin = 7;
-const int greenPin = 8;
-const int bluePin = 9;
+const int redPin = 3;
+const int greenPin = 5;
+const int bluePin = 6;
 const int brightnessPotPin = A1;
 const int ambientLightLdrPin = A2;
 
