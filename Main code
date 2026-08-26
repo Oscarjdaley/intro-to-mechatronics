@@ -5,6 +5,7 @@ Code Summary
   Potentiometer controls brightness 
   cancel button clears the board, resets system 
   Various status updates along the way to inform user 
+  photoresister/ambient ligh sensor when dark light flashes, otherwsie light is constant
 
 
 // Part A
