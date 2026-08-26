@@ -14,7 +14,7 @@ const int potPin = A1;
 const int ldrPin = A2;
 
 int systemState = 1;          // table row, 1 to 4
-int sharedValue = 0;          // ambient reading
+int ambientLightReading = 0;          // ambient reading
 unsigned long lastUpdate = 0; // table step timing
 
 int colourTable[4][3] = {
@@ -24,8 +24,8 @@ int colourTable[4][3] = {
   {255, 0, 0}
 };
 
-int minimumPwm = 25;
-int threshold = 500;
+int minimumBrightnessPwm = 25;
+int ldrThreshold = 500;
 
 void setup() {
   pinMode(redPin, OUTPUT);
@@ -51,14 +51,14 @@ void updateTableIndex() {
 }
 
 void showSelectedColour() {
-  sharedValue = analogRead(ldrPin);
+  ambientLightReading = analogRead(ldrPin);
   int row = systemState - 1;
-  int scale = map(analogRead(potPin), 0, 1023, minimumPwm, 255);
+  int scale = map(analogRead(potPin), 0, 1023, minimumBrightnessPwm, 255);
   int r = colourTable[row][0] * scale / 255;
   int g = colourTable[row][1] * scale / 255;
   int b = colourTable[row][2] * scale / 255;
 
-  if (sharedValue > threshold) {
+  if (ambientLightReading > ldrThreshold) {
     r = 0;
     g = 0;
     b = 0;
@@ -76,6 +76,6 @@ void reportValues() {
     Serial.print("B v4 state=");
     Serial.print(systemState);
     Serial.print(" light=");
-    Serial.println(sharedValue);
+    Serial.println(ambientLightReading);
   }
 }
