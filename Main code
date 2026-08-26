@@ -1,0 +1,20 @@
+// Part A
+const int armButtonPin = 2;
+const int cancelButtonPin = 11;
+const int outputPin = 13;
+
+// Part B
+const int redPin = 3;
+const int greenPin = 5;
+const int bluePin = 6;
+const int potPin = A1;
+const int ldrPin = A2;
+
+// Part C: order is A, B, C, D, E, F, G
+const int segPins[7] = {4, 7, 8, 9, 10, 12, A0};
+const int countdownButtonPin = A3;
+
+A0 and A3 can be used as normal digital pins:
+
+pinMode(A0, OUTPUT);
+pinMode(A3, INPUT_PULLUP);
