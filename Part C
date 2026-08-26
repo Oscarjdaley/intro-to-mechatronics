@@ -9,70 +9,112 @@
 // - what each segment resistor does,
 // - and how the display should behave when idle.
 
-int segPins[7] = {4, 5, 6, 7, 8, 9, 10};
-const int buttonPin = 2;
+int PART_C_SEGMENT_PINS[7] = {4, 7, 8, 9, 10, 12, A0};
+const int PART_C_BUTTON_PIN = A3;
 
-int systemState = 9;          // number currently shown
-int sharedValue = 9;          // countdown start value
-unsigned long lastUpdate = 0; // countdown tick timing
+int partCDisplayedDigit = 9;       // Number currently shown, 0 to 9.
+int partCCountdownStartValue = 9; // Countdown starting value, 0 to 9.
 
-bool countdownActive = false;
-bool buttonWasHigh = false;
-int digitMap[10][7] = {
-  {1,1,1,1,1,1,0}, {0,1,1,0,0,0,0}, {1,1,0,1,1,0,1},
-  {1,1,1,1,0,0,1}, {0,1,1,0,0,1,1}, {1,0,1,1,0,1,1},
-  {1,0,1,1,1,1,1}, {1,1,1,0,0,0,0}, {1,1,1,1,1,1,1},
-  {1,1,1,0,0,1,1}
+unsigned long partCLastTickMs = 0; // Countdown tick timing
+
+bool partCCountdownActive = false;
+bool partCButtonWasDown = false;
+
+// Rows are digits 0-9; columns are segments A-G.
+int PART_C_DIGIT_MAP[10][7] = {
+  {1,1,1,1,1,1,0},
+  {0,1,1,0,0,0,0},
+  {1,1,0,1,1,0,1},
+  {1,1,1,1,0,0,1},
+  {0,1,1,0,0,1,1},
+  {1,0,1,1,0,1,1},
+  {1,0,1,1,1,1,1},
+  {1,1,1,0,0,0,0},
+  {1,1,1,1,1,1,1},
+  {1,1,1,1,0,1,1}
 };
 
 void setup() {
-  for (int k = 0; k < 7; k++) pinMode(segPins[k], OUTPUT);
-  pinMode(buttonPin, INPUT);
+  for (int segment = 0; segment < 7; segment++) {
+    pinMode(PART_C_SEGMENT_PINS[segment], OUTPUT);
+  }
+
+  // Active-low button: released = HIGH, pressed = LOW.
+  pinMode(PART_C_BUTTON_PIN, INPUT_PULLUP);
+
   Serial.begin(9600);
   Serial.println("Send digit for countdown start, press button to begin.");
+
+  showPartCNumber(partCDisplayedDigit);
 }
 
 void loop() {
-  handleSerialStartValue();
-  handleStartButton();
-  serviceCountdown();
-  showNumber(systemState);
+  handlePartCSerialStartValue();
+  handlePartCStartButton();
+  updatePartCCountdown();
+  showPartCNumber(partCDisplayedDigit);
 }
 
-void handleSerialStartValue() {
-  if (Serial.available() == 0) return;
-  char c = Serial.read();
-  if (c >= '0' && c <= '9') {
-    sharedValue = c - '0';
-    systemState = sharedValue;
+void handlePartCSerialStartValue() {
+  if (Serial.available() == 0) {
+    return;
+  }
+
+  char receivedCharacter = Serial.read();
+
+  if (receivedCharacter >= '0' && receivedCharacter <= '9') {
+    partCCountdownStartValue = receivedCharacter - '0';
+    partCDisplayedDigit = partCCountdownStartValue;
   }
 }
 
-void handleStartButton() {
-  bool buttonHigh = digitalRead(buttonPin) == HIGH;
-  if (buttonHigh && !buttonWasHigh) {
-    countdownActive = true;
-    systemState = sharedValue;
-    lastUpdate = millis();
+void handlePartCStartButton() {
+  bool partCButtonDown = digitalRead(PART_C_BUTTON_PIN) == LOW;
+
+  // Start once on the transition from released to pressed.
+  if (partCButtonDown && !partCButtonWasDown) {
+    partCDisplayedDigit = partCCountdownStartValue;
+    partCCountdownActive = partCDisplayedDigit > 0;
+    partCLastTickMs = millis();
+
     Serial.println("countdown started");
   }
-  buttonWasHigh = buttonHigh;
+
+  partCButtonWasDown = partCButtonDown;
 }
 
-void serviceCountdown() {
-  if (!countdownActive) return;
-  if (millis() - lastUpdate >= 1000) {
-    lastUpdate = millis();
-    if (systemState > 0) systemState--;
-    else countdownActive = false;
+void updatePartCCountdown() {
+  if (!partCCountdownActive) {
+    return;
+  }
+
+  // Catch up correctly if another task makes loop() run late.
+  while (partCCountdownActive &&
+         millis() - partCLastTickMs >= 1000UL) {
+    partCLastTickMs += 1000UL;
+    partCDisplayedDigit--;
+
+    if (partCDisplayedDigit == 0) {
+      partCCountdownActive = false;
+      Serial.println("countdown complete");
+    }
   }
 }
 
-void showNumber(int value) {
-  value = constrain(value, 0, 9);
-  for (int s = 0; s < 7; s++) digitalWrite(segPins[s], !digitMap[value][s]);
+void showPartCNumber(int value) {
+  int safeValue = constrain(value, 0, 9);
+
+  for (byte segment = 0; segment < 7; segment++) {
+    // Active-low SSD: LOW turns a required segment on.
+    digitalWrite(
+      PART_C_SEGMENT_PINS[segment],
+      !PART_C_DIGIT_MAP[safeValue][segment]
+    );
+  }
 }
 
-void blankDisplay() {
-  for (int s = 0; s < 7; s++) digitalWrite(segPins[s], HIGH);
+void blankPartCDisplay() {
+  for (byte segment = 0; segment < 7; segment++) {
+    digitalWrite(PART_C_SEGMENT_PINS[segment], HIGH);
+  }
 }
