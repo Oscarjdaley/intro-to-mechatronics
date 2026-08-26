@@ -1,1 +1,81 @@
+// Before integrating this file, write down:
+// - which analog input controls brightness,
+// - which analog input detects ambient light,
+// - whether the RGB LED is common cathode or common anode,
+// - which colour should match each final system state,
+// - which PWM pins conflict with other parts,
+// - and what calculation explains the LED resistor choice.
 
+
+const int redPin = 7;
+const int greenPin = 8;
+const int bluePin = 9;
+const int brightnessPotPin = A1;
+const int ambientLightLdrPin = A2;
+
+int systemState = 1;          // table row, 1 to 4 !! GET RID OF THIS ONE AND JOIN WITH PART A !!
+int ambientLightReading = 0;          // ambient reading
+unsigned long colourCycleTime = 0; // table step timing
+
+int stateColourTable[4][3] = {
+  {0, 200, 40},
+  {255, 120, 0},
+  {140, 0, 255},
+  {255, 0, 0}
+};
+
+int minimumBrightnessPwm = 25;
+int ambientLightThreshold = 500;
+
+void setup() {
+  pinMode(redPin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+  Serial.begin(9600);
+}
+
+void loop() {
+  updateTableIndex();
+  showSelectedColour();
+  reportValues();
+}
+
+void updateTableIndex() {
+  int pot = analogRead(brightnessPotPin);
+  int wait = map(pot, 0, 1023, 4000, 700);
+  if (millis() - colourCycleTime >= (unsigned long)wait) {
+    colourCycleTime = millis();
+    systemState++;
+    if (systemState > 4) systemState = 1;
+  }
+}
+
+void showSelectedColour() {
+  ambientLightReading = analogRead(ambientLightLdrPin);
+  int row = systemState - 1;
+  int scale = map(analogRead(potPin), 0, 1023, minimumBrightnessPwm, 255);
+  int r = stateColourTable[row][0] * scale / 255;
+  int g = stateColourTable[row][1] * scale / 255;
+  int b = stateColourTable[row][2] * scale / 255;
+
+  if (ambientLightReading > ambientLightThreshold) {
+    r = 0;
+    g = 0;
+    b = 0;
+  }
+
+  analogWrite(redPin, r);
+  analogWrite(greenPin, g);
+  analogWrite(bluePin, b);
+}
+
+void reportValues() {
+  static unsigned long lastReport = 0;
+  if (millis() - lastReport >= 1000) {
+    lastReport = millis();
+    Serial.print("B v4 state=");
+    Serial.print(systemState);
+    Serial.print(" light=");
+    Serial.println(ambientLightReading);
+  }
+}
