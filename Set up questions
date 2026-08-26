@@ -1,5 +1,16 @@
 PART A SET UP QUESTIONS
-
+// A2 Part A v4: hold-time input and simple outcome state.
+// One button is held to measure a duration; another button resets the cycle.
+// Students should decide how this state should drive Parts B/C.
+// Before integrating this file, write down:
+// - which button means "start" in the final system,
+// - which button means "cancel" in the final system,
+// - whether the button wiring is active-low or active-high,
+// - which state numbers other parts are expecting,
+// - which pin conflicts must be resolved,
+// - which variables should be renamed,
+// - which Serial messages are still useful,
+// - and what evidence will prove this module works.
 
 
 
