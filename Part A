@@ -11,7 +11,7 @@
 // - which Serial messages are still useful,
 // - and what evidence will prove this module works.
 
-const int armButtonPin = 10;
+const int armButtonPin = 2;
 const int cancelButtonPin = 11;
 const int outputPin = 13;
 
