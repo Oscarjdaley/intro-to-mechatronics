@@ -13,18 +13,82 @@ const int armButtonPin = 2;
 const int cancelButtonPin = 11;
 const int outputPin = 13;
 
-// Part B
+// Part B - pins & variables 
 const int redPin = 3;
 const int greenPin = 5;
 const int bluePin = 6;
-const int potPin = A1;
-const int ldrPin = A2;
+const int potPin = A1;             // controls brightness of the LED
+const int ldrPin = A2;             // LDR senses ambient brightness
 
-// Part C: order is A, B, C, D, E, F, G
-const int segPins[7] = {4, 7, 8, 9, 10, 12, A0};
-const int countdownButtonPin = A3;
+int ambientLightReading = 0;          // last LDR reading, refreshed once per loop (Was part B's "sharedValue")
+unsigned long colourCycleTime = 0;       // when we last advanced to the next colour (was Part B's "lastUpdate")
+int lightShowIndex = 1;                  /* which row of colourTable we're currently showing (was Part B's "systemState") 
+                                            - GET RID OF WHEN FULL CODE IS READY & used the shsred systemState */
+int heldSeconds = 1;                     // the hold duration captured by Part A - now drives LED cycle speed
 
-A0 and A3 can be used as normal digital pins:
+int colourTable[4][3] = {
+  {0, 200, 40},
+  {255, 120, 0},
+  {140, 0, 255},
+  {255, 0, 0}
+};
 
-pinMode(A0, OUTPUT);
-pinMode(A3, INPUT_PULLUP);
+int minimumBrightnessPwm = 25;     // floor so the pot can't turn brightness all the way to 0 mid-scale
+int ldrThreshold = 500;            // above this reading = "dark enough" to run the system - used by both Part A (gate) and Part B (LED cutoff)
+
+
+// Part C
+
+void setup()
+{
+// PART A
+
+// PART B pin setup
+  pinMode(redPin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+
+// PART C
+}
+
+void loop()
+{
+// PART A
+// PART B
+    ambientLightReading = analogRead(ldrPin);                 // PART B (feeds into Part A's dark-check too)
+
+void updateLightShowIndex() {
+  // Map the 1-9 second hold range onto a wait window
+  int wait = map(heldSeconds, 1, 9, 700, 4000);
+  if (millis() - lightShowLastUpdate >= (unsigned long)wait) {
+    lightShowLastUpdate = millis();
+    lightShowIndex++;
+    if (lightShowIndex > 4) lightShowIndex = 1;   // wrap back to the first colour
+  }
+}
+
+void showSelectedColour() {
+  int row = lightShowIndex - 1;
+  
+  /* Pot now ONLY controls brightness, scaling between a minimum PWM floor
+  and full brightness (255) - this is unchanged from Part B */
+
+  int scale = map(analogRead(potPin), 0, 1023, minimumBrightnessPwm, 255);
+  int r = colourTable[row][0] * scale / 255;
+  int g = colourTable[row][1] * scale / 255;
+  int b = colourTable[row][2] * scale / 255;
+
+  // Safety: if it becomes bright again mid-show (e.g. someone turns on a
+  // light), cut the LEDs rather than keep them lit in daylight.
+  if (ambientLightReading <= ldrThreshold) {
+    r = 0; g = 0; b = 0;
+  }
+
+  analogWrite(redPin, r);
+  analogWrite(greenPin, g);
+  analogWrite(bluePin, b);
+}
+
+// PART C
+}
+
