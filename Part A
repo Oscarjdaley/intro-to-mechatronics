@@ -1,88 +1,81 @@
-// A2 Part A v4: hold-time input and simple outcome state.
-// One button is held to measure a duration; another button resets the cycle.
-// Students should decide how this state should drive Parts B/C.
-// Before integrating this file, write down:
-// - which button means "start" in the final system,
-// - which button means "cancel" in the final system,
-// - whether the button wiring is active-low or active-high,
-// - which state numbers other parts are expecting,
-// - which pin conflicts must be resolved,
-// - which variables should be renamed,
-// - which Serial messages are still useful,
-// - and what evidence will prove this module works.
+// A2 Part A: Hold-Time Input Module
 
 const int armButtonPin = 2;
 const int cancelButtonPin = 11;
-const int outputPin = 13;
+const int statusLampPin = 13;
 
-int systemState = 1;          // 1 wait, 2 measuring, 3 short hold, 4 long hold
-int sharedValue = 0;          // duration in whole seconds after release
-unsigned long lastUpdate = 0; // press start time
+int systemState = 1;
+int sharedValue = 0;
+unsigned long holdStartTime = 0;
 
-bool armDownLastLoop = false;
-bool cancelDownLastLoop = false;
-unsigned long shortLimit = 2000;
-unsigned long longLimit = 5000;
+bool armButtonWasDown = false;
+bool cancelButtonWasDown = false;
+unsigned long shortHoldLimitMs = 2000;
+unsigned long longHoldLimitMs = 5000;
 
 void setup() {
   pinMode(armButtonPin, INPUT_PULLUP);
   pinMode(cancelButtonPin, INPUT_PULLUP);
-  pinMode(outputPin, OUTPUT);
+  pinMode(statusLampPin, OUTPUT);
+  digitalWrite(statusLampPin, LOW);
   Serial.begin(9600);
-  Serial.println("A v4: hold arm button, cancel resets");
+  Serial.println("Part A: Hold-Time Input");
 }
 
 void loop() {
   bool armDown = digitalRead(armButtonPin) == LOW;
   bool cancelDown = digitalRead(cancelButtonPin) == LOW;
 
-  if (armDown && !armDownLastLoop && systemState == 1) {
+  // Arm button pressed
+  if (armDown && !armButtonWasDown && systemState == 1) {
     systemState = 2;
-    lastUpdate = millis();
-    Serial.println("measuring hold time");
+    holdStartTime = millis();
+    Serial.println("Measuring started");
   }
 
-  if (!armDown && armDownLastLoop && systemState == 2) {
-    unsigned long heldFor = millis() - lastUpdate;
-    sharedValue = heldFor / 1000;
-    if (heldFor < shortLimit) systemState = 3;
-    else if (heldFor < longLimit) systemState = 4;
-    else systemState = 1;
-    printResult(heldFor);
+  // Arm button released
+  if (!armDown && armButtonWasDown && systemState == 2) {
+    unsigned long heldForMs = millis() - holdStartTime;
+    sharedValue = heldForMs / 1000;
+    
+    if (heldForMs < shortHoldLimitMs) {
+      systemState = 3;
+      Serial.print("SHORT HOLD: ");
+    } else if (heldForMs < longHoldLimitMs) {
+      systemState = 4;
+      Serial.print("LONG HOLD: ");
+    } else {
+      systemState = 1;
+      Serial.print("TOO LONG: ");
+    }
+    
+    Serial.print(heldForMs);
+    Serial.print("ms (");
+    Serial.print(sharedValue);
+    Serial.println("s)");
   }
 
-  if (cancelDown && !cancelDownLastLoop) {
+  // Cancel button pressed
+  if (cancelDown && !cancelButtonWasDown) {
     systemState = 1;
     sharedValue = 0;
-    Serial.println("reset by cancel");
+    Serial.println("Reset");
   }
 
-  updateLampOutput();
-  armDownLastLoop = armDown;
-  cancelDownLastLoop = cancelDown;
+  updateStatusLamp();
+  
+  armButtonWasDown = armDown;
+  cancelButtonWasDown = cancelDown;
 }
 
-void updateLampOutput() {
+void updateStatusLamp() {
   if (systemState == 2) {
-    digitalWrite(outputPin, (millis() / 200) % 2);
-  } else if (systemState == 4) {
-    digitalWrite(outputPin, HIGH);
-  } else {
-    digitalWrite(outputPin, LOW);
+    digitalWrite(statusLampPin, (millis() / 200) % 2);
+  } 
+  else if (systemState == 4) {
+    digitalWrite(statusLampPin, HIGH);
+  } 
+  else {
+    digitalWrite(statusLampPin, LOW);
   }
 }
-
-void printResult(unsigned long heldFor) {
-  Serial.print("held ms=");
-  Serial.print(heldFor);
-  Serial.print(" state=");
-  Serial.println(systemState);
-}
-
-void printPartAChecklist() {
-  Serial.println("Part A checklist:");
-  Serial.println("1. Buttons have stable readings.");
-  Serial.println("2. State changes are explained.");
-  Serial.println("3. Timing uses millis, not delay.");
-}
-
