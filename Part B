@@ -1,4 +1,4 @@
-// Before integrating this file, write down:
+ORIGINAL PART B CODE // Before integrating this file, write down:
 // - which analog input controls brightness,
 // - which analog input detects ambient light,
 // - whether the RGB LED is common cathode or common anode,
