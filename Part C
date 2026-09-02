@@ -9,103 +9,143 @@
 // - what each segment resistor does,
 // - and how the display should behave when idle.
 
-int PART_C_SEGMENT_PINS[7] = {4, 7, 8, 9, 10, 12, A0};
-const int PART_C_BUTTON_PIN = A3;
 
-int partCDisplayedDigit = 9;       // Number currently shown, 0 to 9.
-int partCCountdownStartValue = 9; // Countdown starting value, 0 to 9.
-
-unsigned long partCLastTickMs = 0; // Countdown tick timing
-
-bool partCCountdownActive = false;
-bool partCButtonWasDown = false;
-
-// Rows are digits 0-9; columns are segments A-G.
-int PART_C_DIGIT_MAP[10][7] = {
-  {1,1,1,1,1,1,0},
-  {0,1,1,0,0,0,0},
-  {1,1,0,1,1,0,1},
-  {1,1,1,1,0,0,1},
-  {0,1,1,0,0,1,1},
-  {1,0,1,1,0,1,1},
-  {1,0,1,1,1,1,1},
-  {1,1,1,0,0,0,0},
-  {1,1,1,1,1,1,1},
-  {1,1,1,1,0,1,1}
+// Segment pin order: A, B, C, D, E, F, G.
+// A0 is being used as a normal digital output.
+const int PART_C_SEGMENT_PINS[7] = {
+  4, 7, 8, 9, 10, 12, A0
 };
 
-void setup() {
+
+// Number currently shown on the display.
+int partCDisplayedDigit = 0;
+
+// Value from which the next countdown will begin.
+int partCCountdownStartValue = 0;
+
+// Stores the time of the previous countdown tick.
+unsigned long partCLastTickMs = 0;
+
+// Shows whether the countdown is currently running.
+bool partCCountdownActive = false;
+
+// Allows the other sections to detect when zero is reached.
+bool partCCountdownFinished = false;
+
+
+// Rows are digits 0–9.
+// Columns are segments A–G.
+// A value of 1 means that segment should be illuminated.
+const int PART_C_DIGIT_MAP[10][7] = {
+  {1,1,1,1,1,1,0}, // 0
+  {0,1,1,0,0,0,0}, // 1
+  {1,1,0,1,1,0,1}, // 2
+  {1,1,1,1,0,0,1}, // 3
+  {0,1,1,0,0,1,1}, // 4
+  {1,0,1,1,0,1,1}, // 5
+  {1,0,1,1,1,1,1}, // 6
+  {1,1,1,0,0,0,0}, // 7
+  {1,1,1,1,1,1,1}, // 8
+  {1,1,1,1,0,1,1}  // 9
+};
+
+
+// PART C SETUP
+
+
+
+void setupPartCDisplay() {
   for (int segment = 0; segment < 7; segment++) {
     pinMode(PART_C_SEGMENT_PINS[segment], OUTPUT);
   }
 
-  // Active-low button: released = HIGH, pressed = LOW.
-  pinMode(PART_C_BUTTON_PIN, INPUT_PULLUP);
+  // Keep the display blank until a duration is selected.
+  blankPartCDisplay();
+}
 
-  Serial.begin(9600);
-  Serial.println("Send digit for countdown start, press button to begin.");
+// SELECTING AND STARTING THE COUNTDOWN
 
+// Part A calls this after calculating the duration.
+void setPartCCountdownValue(int seconds) {
+  // A single-digit display can only show values from 0 to 9.
+  partCCountdownStartValue = constrain(seconds, 0, 9);
+  partCDisplayedDigit = partCCountdownStartValue;
+
+  partCCountdownActive = false;
+  partCCountdownFinished = false;
+
+  // Show the selected duration before counting begins.
   showPartCNumber(partCDisplayedDigit);
 }
 
-void loop() {
-  handlePartCSerialStartValue();
-  handlePartCStartButton();
-  updatePartCCountdown();
+
+// Call this when the final system receives its start event.
+void startPartCCountdown() {
+  // Restart from the saved countdown value.
+  partCDisplayedDigit = partCCountdownStartValue;
+  partCLastTickMs = millis();
+  partCCountdownFinished = false;
+
   showPartCNumber(partCDisplayedDigit);
-}
 
-void handlePartCSerialStartValue() {
-  if (Serial.available() == 0) {
-    return;
-  }
-
-  char receivedCharacter = Serial.read();
-
-  if (receivedCharacter >= '0' && receivedCharacter <= '9') {
-    partCCountdownStartValue = receivedCharacter - '0';
-    partCDisplayedDigit = partCCountdownStartValue;
+  if (partCDisplayedDigit > 0) {
+    partCCountdownActive = true;
+  } else {
+    // Starting at zero means the countdown is already finished.
+    partCCountdownActive = false;
+    partCCountdownFinished = true;
   }
 }
 
-void handlePartCStartButton() {
-  bool partCButtonDown = digitalRead(PART_C_BUTTON_PIN) == LOW;
 
-  // Start once on the transition from released to pressed.
-  if (partCButtonDown && !partCButtonWasDown) {
-    partCDisplayedDigit = partCCountdownStartValue;
-    partCCountdownActive = partCDisplayedDigit > 0;
-    partCLastTickMs = millis();
-
-    Serial.println("countdown started");
-  }
-
-  partCButtonWasDown = partCButtonDown;
-}
+// PART C MAIN LOOP
 
 void updatePartCCountdown() {
   if (!partCCountdownActive) {
     return;
   }
 
-  // Catch up correctly if another task makes loop() run late.
-  while (partCCountdownActive &&
-         millis() - partCLastTickMs >= 1000UL) {
+  // millis() allows Parts A and B to continue operating.
+  // The while loop catches up if the main loop runs late.
+  while (
+    partCCountdownActive &&
+    millis() - partCLastTickMs >= 1000UL
+  ) {
     partCLastTickMs += 1000UL;
     partCDisplayedDigit--;
 
+    showPartCNumber(partCDisplayedDigit);
+
+    // Stop immediately when the display reaches zero.
     if (partCDisplayedDigit == 0) {
       partCCountdownActive = false;
-      Serial.println("countdown complete");
+      partCCountdownFinished = true;
     }
   }
 }
 
+// CANCEL/RESET SECTION
+
+// Part A calls this when its cancel button is pressed.
+void cancelPartCCountdown() {
+  partCCountdownActive = false;
+  partCCountdownFinished = false;
+  partCCountdownStartValue = 0;
+  partCDisplayedDigit = 0;
+
+  blankPartCDisplay();
+}
+
+
+// DISPLAY CONTROL SECTION
+
 void showPartCNumber(int value) {
+  // Prevent an invalid row of the digit table from being accessed.
   int safeValue = constrain(value, 0, 9);
 
-  for (byte segment = 0; segment < 7; segment++) {
-    // Active-low SSD: LOW turns a required segment on.
+  for (int segment = 0; segment < 7; segment++) {
+    // The display is active-low:
+    // LOW turns a segment on and HIGH turns it off.
     digitalWrite(
       PART_C_SEGMENT_PINS[segment],
       !PART_C_DIGIT_MAP[safeValue][segment]
@@ -113,8 +153,10 @@ void showPartCNumber(int value) {
   }
 }
 
+
 void blankPartCDisplay() {
-  for (byte segment = 0; segment < 7; segment++) {
+  // HIGH turns every segment off on the active-low display.
+  for (int segment = 0; segment < 7; segment++) {
     digitalWrite(PART_C_SEGMENT_PINS[segment], HIGH);
   }
 }
