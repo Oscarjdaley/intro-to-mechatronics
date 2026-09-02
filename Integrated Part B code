@@ -1,0 +1,188 @@
+const int redPin = 3;
+const int greenPin = 5;
+const int bluePin = 6;
+
+const int potPin = A1;
+const int ldrPin = A2;
+
+int ambientLightReading = 0;              // Stores current LDR reading
+
+unsigned long partBLastUpdate = 0;        // Controls colour changes
+
+unsigned long partBLastFlash = 0;         // Controls RGB flashing
+
+bool partBFlashing = false;               //Whether RGB LED is currently flashing
+
+bool partBRgbOn = false;                  // Stores whether the RGB LED is currently ON during flashing.
+
+int colourTable[4][3] = {
+  {0, 200, 40},
+  {255, 120, 0},
+  {140, 0, 255},
+  {255, 0, 0}
+};
+
+int partBColourIndex = 0;
+
+int minimumBrightnessPwm = 25;            // Min brightness
+
+int ldrThreshold = 500;
+
+// Part A's main setup() should call this function
+void setupPartB() 
+{  
+
+  pinMode(redPin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+
+  turnPartBRgbOff();                   // Make sure RGB LED starts OFF
+}
+
+
+// Checks the current light level.
+
+bool partBIsDarkEnough() 
+{
+
+  ambientLightReading = analogRead(ldrPin);
+
+  if (ambientLightReading <= ldrThreshold) 
+  {
+    return true;
+  }
+  else 
+  {
+    return false;
+  }
+}
+
+// This uses the potentiometer to control brightness.
+
+void showPartBColour() {
+
+  // Read the LDR.
+  ambientLightReading = analogRead(ldrPin);
+
+  // Read the potentiometer.
+  int pot = analogRead(potPin);
+
+  // Convert potentiometer value to PWM brightness.
+  int scale = map(
+    pot = 0, 1023
+    minimumBrightnessPwm = 255
+  );
+
+  // Get the RGB values from the current colour.
+  int r = colourTable[partBColourIndex][0] * scale / 255;
+  int g = colourTable[partBColourIndex][1] * scale / 255;
+  int b = colourTable[partBColourIndex][2] * scale / 255;
+
+  if (ambientLightReading > ldrThreshold)
+  {
+    r = 0;
+    g = 0;
+    b = 0;
+  }
+
+  analogWrite(redPin, r);
+  analogWrite(greenPin, g);
+  analogWrite(bluePin, b);
+}
+
+// Part C calls this when the countdown reaches zero.
+
+void startPartBFlashing() {
+
+  partBFlashing = true;
+  partBRgbOn = false;
+
+  partBLastFlash = millis();
+
+  turnPartBRgbOff();
+}
+
+// This function must be called repeatedly from loop(). It does NOT use delay(), so Parts A and C can continue operating at the same time.
+
+void updatePartBFlashing() 
+{
+
+  if (!partBFlashing) 
+  {
+    return;
+  }
+
+  if (millis() - partBLastFlash >= 500UL) 
+  {
+    partBLastFlash = millis();
+    partBRgbOn = !partBRgbOn;
+
+    if (partBRgbOn) 
+    {
+      showPartBColour();
+    }
+    else 
+    {
+      turnPartBRgbOff();
+    }
+  }
+}
+
+// Part A calls this whenever CANCEL is pressed. This immediately stops flashing and turns the RGB LED OFF.
+
+void cancelPartB() 
+{
+  partBFlashing = false;
+  partBRgbOn = false;
+  turnPartBRgbOff();
+}
+
+void turnPartBRgbOff() {
+
+  analogWrite(redPin, 0);
+  analogWrite(greenPin, 0);
+  analogWrite(bluePin, 0);
+}
+
+// serial monitor report
+
+void reportPartBValues() 
+{
+  static unsigned long lastReport = 0;
+
+  if (millis() - lastReport >= 1000UL) 
+  {
+    lastReport = millis();
+
+    Serial.print("Part B: LDR = ");
+    Serial.print(ambientLightReading);
+    Serial.print(" | Dark enough = ");
+
+    if (partBIsDarkEnough()) 
+    {
+      Serial.println("Room is Dark Enough");
+    }
+    else 
+    {
+      Serial.println("Room needs to be darker");
+    }
+  }
+}
+
+// Part A's loop() should call this function - it keeps Part B running without having its own loop
+
+void updatePartB() 
+{
+
+  // Continuously monitor the LDR.
+  ambientLightReading = analogRead(ldrPin);
+
+  // Keep the original colour-changing behaviour.
+  updatePartBColour();
+
+  // Handle RGB flashing if Part C has finished.
+  updatePartBFlashing();
+
+  // Report the LDR value to Serial Monitor.
+  reportPartBValues();
+}
