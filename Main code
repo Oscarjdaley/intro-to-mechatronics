@@ -7,48 +7,105 @@ Code Summary
   Various status updates along the way to inform user 
   if both the button has been pressed and the photoresister sesnses no light (nighttime), then the countdown and LED code will start
 
-/* PART A:
-- Measures how long the starting button is held
-- 1–9 second hold = countdown duration
-- >9 seconds = invalid, system resets
-*/
-/* PART B:
- - Controls common-cathode RGB LED
- - Four colours cycle after countdown reaches zero
- - Potentiometer controls LED brightness ONLY
-*/
-/* PART C:
-- Controls single 7-segment display
-- Displays selected countdown time
-- Counts down once per second
-*/
+// ============================================================
+// INTEGRATED PART A + PART B + PART C
+// ============================================================
+//
+// PART A:
+// - Measures how long the starting button is held
+// - 1–9 second hold = countdown duration
+// - >9 seconds = invalid, system resets
+//
+// PART B:
+// - Controls common-cathode RGB LED
+// - Four colours cycle after countdown reaches zero
+// - Potentiometer controls LED brightness ONLY
+//
+// PART C:
+// - Controls single 7-segment display
+// - Displays selected countdown time
+// - Counts down once per second
+//
+// LDR:
+// - System can ONLY be started when the environment is DARK
+//
+// RESET:
+// - Cancel/reset button can be pressed at any time
+//
+// ============================================================
 
-// PART A - pins, variables & system states
 
+// ============================================================
+// PART A - INPUTS AND SYSTEM CONTROL
+// ============================================================
+
+// Starting button
 const int armButtonPin = 2;
+
+// Reset/cancel button
 const int cancelButtonPin = 11;
+
+// Status LED
 const int statusLampPin = 13;
 
+
+// ============================================================
+// LDR - DARKNESS DETECTION
+// ============================================================
+
+// LDR pin
+const int ldrPin = A2;
+
+// Darkness threshold
+//
+// If the LDR reading is BELOW this value,
+// the environment is considered DARK.
+//
+// You may need to adjust this value depending
+// on your LDR wiring and surrounding light.
+const int darkThreshold = 1200;
+
+
+// ------------------------------------------------------------
+// SYSTEM STATES
+// ------------------------------------------------------------
+//
+// 1 = IDLE
+// 2 = MEASURING BUTTON HOLD
+// 3 = COUNTDOWN
+// 4 = RGB COLOUR CYCLING
+//
 int systemState = 1;
+
 
 // Stores the countdown duration selected by the user
 int sharedValue = 0;
 
+
 // Time at which the starting button was pressed
 unsigned long holdStartTime = 0;
+
 
 // Used for detecting button state changes
 bool armButtonWasDown = false;
 bool cancelButtonWasDown = false;
 
+
 // Maximum allowed button hold
 const unsigned long maximumHoldMs = 9000;
 
-// PART B - pins & variables
 
+// ============================================================
+// PART B - RGB LED AND POTENTIOMETER
+// ============================================================
+
+// RGB LED pins
 const int redPin = 3;
 const int greenPin = 5;
 const int bluePin = 6;
+
+
+// Potentiometer controls ONLY brightness
 const int potPin = A1;
 
 
@@ -180,6 +237,13 @@ void setup() {
 
 
   // ----------------------------------------------------------
+  // LDR
+  // ----------------------------------------------------------
+
+  pinMode(ldrPin, INPUT);
+
+
+  // ----------------------------------------------------------
   // PART B
   // ----------------------------------------------------------
 
@@ -204,6 +268,7 @@ void setup() {
   Serial.println("=================================");
   Serial.println("Integrated Parts A + B + C");
   Serial.println("System ready.");
+  Serial.println("System will only start when DARK.");
   Serial.println("Hold starting button for 1-9 seconds.");
   Serial.println("Maximum hold = 9 seconds.");
   Serial.println("=================================");
@@ -263,11 +328,25 @@ void loop() {
 
   if (armDown && !armButtonWasDown && systemState == 1) {
 
-    systemState = 2;
+    // --------------------------------------------------------
+    // CHECK LDR BEFORE ALLOWING SYSTEM TO START
+    // --------------------------------------------------------
 
-    holdStartTime = millis();
+    if (isDark()) {
 
-    Serial.println("Measuring starting-button hold time...");
+      systemState = 2;
+
+      holdStartTime = millis();
+
+      Serial.println("Dark environment detected.");
+      Serial.println("Measuring starting-button hold time...");
+    }
+
+    else {
+
+      Serial.println("TOO BRIGHT: System will not start.");
+      Serial.println("Please make the environment darker.");
+    }
   }
 
 
@@ -343,10 +422,11 @@ void loop() {
         // Give the selected duration to Part C
         setPartCCountdownValue(sharedValue);
 
+        // Make absolutely sure RGB LED is OFF
+        turnOffRGB();
 
         // Start the countdown
         startPartCCountdown();
-
 
         // Move to countdown state
         systemState = 3;
@@ -413,6 +493,25 @@ void loop() {
   cancelButtonWasDown = cancelDown;
 }
 
+
+// ============================================================
+// LDR FUNCTION
+// ============================================================
+//
+// Returns TRUE when the environment is dark.
+//
+// The system is only allowed to start when it is dark.
+// ============================================================
+
+bool isDark() {
+
+  int ldrValue = analogRead(ldrPin);
+
+  Serial.print("LDR reading: ");
+  Serial.println(ldrValue);
+
+  return ldrValue < darkThreshold;
+}
 
 // ============================================================
 // PART C FUNCTIONS
@@ -721,43 +820,18 @@ void resetSystem() {
   digitalWrite(statusLampPin, LOW);
 }
 
-
 // ============================================================
 // STATUS LED
 // ============================================================
-
+//
+// Pin 13 is ON whenever the Arduino system is running.
+// This acts as the "Arduino is powered/ready" indicator.
+//
+// RGB LED is controlled separately and stays OFF until
+// the countdown has finished.
+// ============================================================
 void updateStatusLamp() {
 
-  // ----------------------------------------------------------
-  // STATE 2 = MEASURING
-  // ----------------------------------------------------------
-
-  if (systemState == 2) {
-
-    // Flash every 200 ms
-    digitalWrite(
-      statusLampPin,
-      (millis() / 200) % 2
-    );
-  }
-
-
-  // ----------------------------------------------------------
-  // STATE 4 = RGB COLOUR CYCLING
-  // ----------------------------------------------------------
-
-  else if (systemState == 4) {
-
-    digitalWrite(statusLampPin, HIGH);
-  }
-
-
-  // ----------------------------------------------------------
-  // ALL OTHER STATES
-  // ----------------------------------------------------------
-
-  else {
-
-    digitalWrite(statusLampPin, LOW);
-  }
+  // Pin 13 LED is always ON while Arduino is running
+  digitalWrite(statusLampPin, HIGH);
 }
