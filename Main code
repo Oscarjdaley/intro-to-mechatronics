@@ -17,7 +17,7 @@ Code Summary
 // - >9 seconds = invalid, system resets
 //
 // PART B:
-// - Controls common-cathode RGB LED
+// - Controls COMMON-ANODE RGB LED
 // - Four colours cycle after countdown reaches zero
 // - Potentiometer controls LED brightness ONLY
 //
@@ -45,9 +45,6 @@ const int armButtonPin = 2;
 // Reset/cancel button
 const int cancelButtonPin = 11;
 
-// Status LED
-const int statusLampPin = 13;
-
 
 // ============================================================
 // LDR - DARKNESS DETECTION
@@ -58,23 +55,23 @@ const int ldrPin = A2;
 
 // Darkness threshold
 //
-// If the LDR reading is BELOW this value,
-// the environment is considered DARK.
+// Your LDR gives HIGHER readings when darker.
+// Therefore:
+// LDR reading > darkThreshold = DARK
 //
-// You may need to adjust this value depending
-// on your LDR wiring and surrounding light.
-const int darkThreshold = 1200;
+const int darkThreshold = 800;
 
 
-// ------------------------------------------------------------
+// ============================================================
 // SYSTEM STATES
-// ------------------------------------------------------------
+// ============================================================
 //
 // 1 = IDLE
 // 2 = MEASURING BUTTON HOLD
 // 3 = COUNTDOWN
 // 4 = RGB COLOUR CYCLING
 //
+
 int systemState = 1;
 
 
@@ -116,13 +113,14 @@ const int potPin = A1;
 // Each row contains:
 // { RED, GREEN, BLUE }
 //
-// These are PWM values for a COMMON-CATHODE RGB LED.
+// These values represent desired brightness levels.
 //
-// 1 = green/cyan colour
-// 2 = orange
-// 3 = purple
-// 4 = red
+// Colour 1 = green/cyan
+// Colour 2 = orange
+// Colour 3 = purple
+// Colour 4 = red
 //
+
 int colourTable[4][3] = {
   {0,   200, 40},
   {255, 120, 0},
@@ -135,7 +133,7 @@ int colourTable[4][3] = {
 int currentColour = 0;
 
 
-// Time at which the RGB colour was last changed
+// Time at which the RGB LED colour was last changed
 unsigned long lastColourChange = 0;
 
 
@@ -164,7 +162,7 @@ const int minimumBrightnessPwm = 25;
 // G  = A0
 //
 // The display is ACTIVE-LOW.
-// Therefore:
+//
 // LOW  = segment ON
 // HIGH = segment OFF
 //
@@ -184,6 +182,7 @@ const int PART_C_SEGMENT_PINS[7] = {
 // 1 = segment should be ON
 // 0 = segment should be OFF
 //
+
 const int PART_C_DIGIT_MAP[10][7] = {
 
   {1,1,1,1,1,1,0}, // 0
@@ -231,9 +230,6 @@ void setup() {
 
   pinMode(armButtonPin, INPUT_PULLUP);
   pinMode(cancelButtonPin, INPUT_PULLUP);
-
-  pinMode(statusLampPin, OUTPUT);
-  digitalWrite(statusLampPin, LOW);
 
 
   // ----------------------------------------------------------
@@ -299,15 +295,6 @@ void loop() {
 
   // ==========================================================
   // RESET BUTTON
-  // ==========================================================
-  //
-  // The reset button is checked first.
-  //
-  // This means it can interrupt:
-  // - button measurement
-  // - countdown
-  // - RGB colour cycling
-  //
   // ==========================================================
 
   if (cancelDown && !cancelButtonWasDown) {
@@ -422,11 +409,14 @@ void loop() {
         // Give the selected duration to Part C
         setPartCCountdownValue(sharedValue);
 
+
         // Make absolutely sure RGB LED is OFF
         turnOffRGB();
 
+
         // Start the countdown
         startPartCCountdown();
+
 
         // Move to countdown state
         systemState = 3;
@@ -479,13 +469,6 @@ void loop() {
 
 
   // ==========================================================
-  // STATUS LED
-  // ==========================================================
-
-  updateStatusLamp();
-
-
-  // ==========================================================
   // SAVE CURRENT BUTTON STATES
   // ==========================================================
 
@@ -500,7 +483,10 @@ void loop() {
 //
 // Returns TRUE when the environment is dark.
 //
-// The system is only allowed to start when it is dark.
+// Your LDR produces a HIGHER reading when darker.
+// Therefore:
+// reading > darkThreshold = DARK
+//
 // ============================================================
 
 bool isDark() {
@@ -512,6 +498,7 @@ bool isDark() {
 
   return ldrValue < darkThreshold;
 }
+
 
 // ============================================================
 // PART C FUNCTIONS
@@ -679,26 +666,36 @@ void blankPartCDisplay() {
 // UPDATE RGB COLOURS
 // ------------------------------------------------------------
 //
-// The potentiometer DOES NOT control this timing.
+// The potentiometer DOES NOT control colour timing.
 //
 // The colour changes every 1000 ms.
 //
-// The potentiometer only changes PWM brightness.
+// The potentiometer only changes brightness.
+//
+// IMPORTANT:
+// This RGB LED is COMMON-ANODE.
+//
+// Therefore:
+// PWM 0   = FULL ON
+// PWM 255 = OFF
+//
+// The desired RGB brightness values are therefore inverted
+// before being sent to the LED.
 //
 
 void updateRGBColours() {
 
-  // Change colour once per second
+  // ----------------------------------------------------------
+  // CHANGE COLOUR ONCE PER SECOND
+  // ----------------------------------------------------------
+
   if (millis() - lastColourChange >= colourChangeInterval) {
 
     lastColourChange = millis();
 
     currentColour++;
 
-
-    // Return to first colour after colour 4
     if (currentColour >= 4) {
-
       currentColour = 0;
     }
   }
@@ -711,11 +708,10 @@ void updateRGBColours() {
   int potValue = analogRead(potPin);
 
 
-  // Convert potentiometer reading:
-  //
-  // 0    -> minimum brightness
-  // 1023 -> maximum brightness
-  //
+  // ----------------------------------------------------------
+  // POTENTIOMETER CONTROLS BRIGHTNESS ONLY
+  // ----------------------------------------------------------
+
   int brightness = map(
     potValue,
     0,
@@ -739,10 +735,6 @@ void updateRGBColours() {
   // ----------------------------------------------------------
   // APPLY BRIGHTNESS
   // ----------------------------------------------------------
-  //
-  // Because this is a COMMON-CATHODE RGB LED,
-  // larger PWM values = greater brightness.
-  //
 
   r = r * brightness / 255;
 
@@ -751,38 +743,43 @@ void updateRGBColours() {
   b = b * brightness / 255;
 
 
-  // Output PWM values
-  analogWrite(redPin, r);
+  // ----------------------------------------------------------
+  // COMMON-ANODE RGB LED
+  //
+  // Invert the values because common-anode is ACTIVE-LOW.
+  // ----------------------------------------------------------
 
-  analogWrite(greenPin, g);
+  analogWrite(redPin, 255 - r);
 
-  analogWrite(bluePin, b);
+  analogWrite(greenPin, 255 - g);
+
+  analogWrite(bluePin, 255 - b);
 }
 
 
 // ------------------------------------------------------------
 // TURN RGB LED OFF
 // ------------------------------------------------------------
+//
+// For a COMMON-ANODE RGB LED:
+//
+// 255 = OFF
+// 0   = FULL ON
+//
 
 void turnOffRGB() {
 
-  analogWrite(redPin, 0);
+  analogWrite(redPin, 255);
 
-  analogWrite(greenPin, 0);
+  analogWrite(greenPin, 255);
 
-  analogWrite(bluePin, 0);
+  analogWrite(bluePin, 255);
 }
 
 
 // ============================================================
 // RESET FUNCTION
 // ============================================================
-//
-// This function centralises the reset behaviour.
-//
-// This avoids having different parts of the program trying to
-// reset different variables independently.
-//
 
 void resetSystem() {
 
@@ -814,24 +811,4 @@ void resetSystem() {
 
   // Blank display
   blankPartCDisplay();
-
-
-  // Reset status LED
-  digitalWrite(statusLampPin, LOW);
-}
-
-// ============================================================
-// STATUS LED
-// ============================================================
-//
-// Pin 13 is ON whenever the Arduino system is running.
-// This acts as the "Arduino is powered/ready" indicator.
-//
-// RGB LED is controlled separately and stays OFF until
-// the countdown has finished.
-// ============================================================
-void updateStatusLamp() {
-
-  // Pin 13 LED is always ON while Arduino is running
-  digitalWrite(statusLampPin, HIGH);
 }
