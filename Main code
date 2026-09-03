@@ -7,88 +7,757 @@ Code Summary
   Various status updates along the way to inform user 
   if both the button has been pressed and the photoresister sesnses no light (nighttime), then the countdown and LED code will start
 
+/* PART A:
+- Measures how long the starting button is held
+- 1–9 second hold = countdown duration
+- >9 seconds = invalid, system resets
+*/
+/* PART B:
+ - Controls common-cathode RGB LED
+ - Four colours cycle after countdown reaches zero
+ - Potentiometer controls LED brightness ONLY
+*/
+/* PART C:
+- Controls single 7-segment display
+- Displays selected countdown time
+- Counts down once per second
+*/
 
-// Part A
+// PART A - pins, variables & system states
+
 const int armButtonPin = 2;
 const int cancelButtonPin = 11;
-const int outputPin = 13;
+const int statusLampPin = 13;
 
-// Part B - pins & variables 
+int systemState = 1;
+
+// Stores the countdown duration selected by the user
+int sharedValue = 0;
+
+// Time at which the starting button was pressed
+unsigned long holdStartTime = 0;
+
+// Used for detecting button state changes
+bool armButtonWasDown = false;
+bool cancelButtonWasDown = false;
+
+// Maximum allowed button hold
+const unsigned long maximumHoldMs = 9000;
+
+// PART B - pins & variables
+
 const int redPin = 3;
 const int greenPin = 5;
 const int bluePin = 6;
-const int potPin = A1;             // controls brightness of the LED
-const int ldrPin = A2;             // LDR senses ambient brightness
+const int potPin = A1;
 
-int ambientLightReading = 0;          // last LDR reading, refreshed once per loop (Was part B's "sharedValue")
-unsigned long colourCycleTime = 0;       // when we last advanced to the next colour (was Part B's "lastUpdate")
-int lightShowIndex = 1;                  /* which row of colourTable we're currently showing (was Part B's "systemState") 
-                                            - GET RID OF WHEN FULL CODE IS READY & used the shsred systemState */
-int heldSeconds = 1;                     // the hold duration captured by Part A - now drives LED cycle speed
 
+// ------------------------------------------------------------
+// COLOUR TABLE
+// ------------------------------------------------------------
+//
+// Each row contains:
+// { RED, GREEN, BLUE }
+//
+// These are PWM values for a COMMON-CATHODE RGB LED.
+//
+// 1 = green/cyan colour
+// 2 = orange
+// 3 = purple
+// 4 = red
+//
 int colourTable[4][3] = {
-  {0, 200, 40},
+  {0,   200, 40},
   {255, 120, 0},
-  {140, 0, 255},
-  {255, 0, 0}
+  {140, 0,   255},
+  {255, 0,   0}
 };
 
-int minimumBrightnessPwm = 25;     // floor so the pot can't turn brightness all the way to 0 mid-scale
-int ldrThreshold = 500;            // above this reading = "dark enough" to run the system - used by both Part A (gate) and Part B (LED cutoff)
+
+// Current colour in the cycle
+int currentColour = 0;
 
 
-// Part C
+// Time at which the RGB colour was last changed
+unsigned long lastColourChange = 0;
 
-void setup()
-{
-// PART A
 
-// PART B pin setup
+// How long each colour remains on
+const unsigned long colourChangeInterval = 1000;
+
+
+// Minimum LED brightness
+const int minimumBrightnessPwm = 25;
+
+
+// ============================================================
+// PART C - 7-SEGMENT DISPLAY
+// ============================================================
+//
+// Segment order:
+// A, B, C, D, E, F, G
+//
+// Pins:
+// A  = 4
+// B  = 7
+// C  = 8
+// D  = 9
+// E  = 10
+// F  = 12
+// G  = A0
+//
+// The display is ACTIVE-LOW.
+// Therefore:
+// LOW  = segment ON
+// HIGH = segment OFF
+//
+
+const int PART_C_SEGMENT_PINS[7] = {
+  4, 7, 8, 9, 10, 12, A0
+};
+
+
+// ------------------------------------------------------------
+// DIGIT MAP
+// ------------------------------------------------------------
+//
+// Rows = numbers 0–9
+// Columns = segments A–G
+//
+// 1 = segment should be ON
+// 0 = segment should be OFF
+//
+const int PART_C_DIGIT_MAP[10][7] = {
+
+  {1,1,1,1,1,1,0}, // 0
+  {0,1,1,0,0,0,0}, // 1
+  {1,1,0,1,1,0,1}, // 2
+  {1,1,1,1,0,0,1}, // 3
+  {0,1,1,0,0,1,1}, // 4
+  {1,0,1,1,0,1,1}, // 5
+  {1,0,1,1,1,1,1}, // 6
+  {1,1,1,0,0,0,0}, // 7
+  {1,1,1,1,1,1,1}, // 8
+  {1,1,1,1,0,1,1}  // 9
+};
+
+
+// Number currently shown
+int partCDisplayedDigit = 0;
+
+
+// Starting value of the countdown
+int partCCountdownStartValue = 0;
+
+
+// Stores the time of the previous countdown tick
+unsigned long partCLastTickMs = 0;
+
+
+// True while countdown is running
+bool partCCountdownActive = false;
+
+
+// True when countdown has reached zero
+bool partCCountdownFinished = false;
+
+
+// ============================================================
+// SETUP
+// ============================================================
+
+void setup() {
+
+  // ----------------------------------------------------------
+  // PART A
+  // ----------------------------------------------------------
+
+  pinMode(armButtonPin, INPUT_PULLUP);
+  pinMode(cancelButtonPin, INPUT_PULLUP);
+
+  pinMode(statusLampPin, OUTPUT);
+  digitalWrite(statusLampPin, LOW);
+
+
+  // ----------------------------------------------------------
+  // PART B
+  // ----------------------------------------------------------
+
   pinMode(redPin, OUTPUT);
   pinMode(greenPin, OUTPUT);
   pinMode(bluePin, OUTPUT);
 
-// PART C
+
+  // ----------------------------------------------------------
+  // PART C
+  // ----------------------------------------------------------
+
+  setupPartCDisplay();
+
+
+  // ----------------------------------------------------------
+  // SERIAL MONITOR
+  // ----------------------------------------------------------
+
+  Serial.begin(9600);
+
+  Serial.println("=================================");
+  Serial.println("Integrated Parts A + B + C");
+  Serial.println("System ready.");
+  Serial.println("Hold starting button for 1-9 seconds.");
+  Serial.println("Maximum hold = 9 seconds.");
+  Serial.println("=================================");
+
+
+  // Make sure RGB LED starts OFF
+  turnOffRGB();
+
+
+  // Make sure display starts blank
+  blankPartCDisplay();
 }
 
-void loop()
-{
-// PART A
-// PART B
-    ambientLightReading = analogRead(ldrPin);                 // PART B (feeds into Part A's dark-check too)
 
-void updateLightShowIndex() {
-  // Map the 1-9 second hold range onto a wait window
-  int wait = map(heldSeconds, 1, 9, 700, 4000);
-  if (millis() - lightShowLastUpdate >= (unsigned long)wait) {
-    lightShowLastUpdate = millis();
-    lightShowIndex++;
-    if (lightShowIndex > 4) lightShowIndex = 1;   // wrap back to the first colour
+// ============================================================
+// MAIN LOOP
+// ============================================================
+
+void loop() {
+
+  // ----------------------------------------------------------
+  // READ BUTTONS
+  // ----------------------------------------------------------
+
+  bool armDown = digitalRead(armButtonPin) == LOW;
+  bool cancelDown = digitalRead(cancelButtonPin) == LOW;
+
+
+  // ==========================================================
+  // RESET BUTTON
+  // ==========================================================
+  //
+  // The reset button is checked first.
+  //
+  // This means it can interrupt:
+  // - button measurement
+  // - countdown
+  // - RGB colour cycling
+  //
+  // ==========================================================
+
+  if (cancelDown && !cancelButtonWasDown) {
+
+    resetSystem();
+
+    Serial.println("RESET: System returned to idle.");
+  }
+
+
+  // ==========================================================
+  // PART A - MEASURE START BUTTON HOLD TIME
+  // ==========================================================
+
+  // ----------------------------------------------------------
+  // START MEASUREMENT
+  // ----------------------------------------------------------
+
+  if (armDown && !armButtonWasDown && systemState == 1) {
+
+    systemState = 2;
+
+    holdStartTime = millis();
+
+    Serial.println("Measuring starting-button hold time...");
+  }
+
+
+  // ----------------------------------------------------------
+  // BUTTON RELEASED
+  // ----------------------------------------------------------
+
+  if (!armDown && armButtonWasDown && systemState == 2) {
+
+    // Calculate how long the button was held
+    unsigned long heldForMs = millis() - holdStartTime;
+
+
+    // --------------------------------------------------------
+    // CHECK FOR MORE THAN 9 SECONDS
+    // --------------------------------------------------------
+
+    if (heldForMs > maximumHoldMs) {
+
+      systemState = 1;
+
+      sharedValue = 0;
+
+      blankPartCDisplay();
+
+      Serial.print("TOO LONG: ");
+      Serial.print(heldForMs);
+      Serial.println(" ms.");
+
+      Serial.println("Countdown terminated.");
+      Serial.println("Please try again and hold the button for 1-9 seconds.");
+    }
+
+
+    // --------------------------------------------------------
+    // VALID HOLD: 1-9 SECONDS
+    // --------------------------------------------------------
+
+    else {
+
+      // Convert milliseconds to whole seconds
+      sharedValue = heldForMs / 1000;
+
+
+      // ------------------------------------------------------
+      // CHECK FOR AT LEAST 1 SECOND
+      // ------------------------------------------------------
+
+      if (sharedValue < 1) {
+
+        systemState = 1;
+
+        sharedValue = 0;
+
+        blankPartCDisplay();
+
+        Serial.println("HOLD TOO SHORT.");
+        Serial.println("Please hold the button for at least 1 second.");
+      }
+
+
+      // ------------------------------------------------------
+      // VALID COUNTDOWN
+      // ------------------------------------------------------
+
+      else {
+
+        Serial.print("Selected countdown: ");
+        Serial.print(sharedValue);
+        Serial.println(" seconds");
+
+
+        // Give the selected duration to Part C
+        setPartCCountdownValue(sharedValue);
+
+
+        // Start the countdown
+        startPartCCountdown();
+
+
+        // Move to countdown state
+        systemState = 3;
+
+        Serial.println("Countdown started.");
+      }
+    }
+  }
+
+
+  // ==========================================================
+  // PART C - UPDATE COUNTDOWN
+  // ==========================================================
+
+  if (systemState == 3) {
+
+    updatePartCCountdown();
+
+
+    // --------------------------------------------------------
+    // CHECK WHETHER COUNTDOWN HAS REACHED ZERO
+    // --------------------------------------------------------
+
+    if (partCCountdownFinished) {
+
+      Serial.println("Countdown reached 0.");
+      Serial.println("Starting RGB colour cycle.");
+
+
+      // Reset colour cycle to first colour
+      currentColour = 0;
+
+      lastColourChange = millis();
+
+
+      // Move into RGB colour cycling state
+      systemState = 4;
+    }
+  }
+
+
+  // ==========================================================
+  // PART B - RGB COLOUR CYCLING
+  // ==========================================================
+
+  if (systemState == 4) {
+
+    updateRGBColours();
+  }
+
+
+  // ==========================================================
+  // STATUS LED
+  // ==========================================================
+
+  updateStatusLamp();
+
+
+  // ==========================================================
+  // SAVE CURRENT BUTTON STATES
+  // ==========================================================
+
+  armButtonWasDown = armDown;
+  cancelButtonWasDown = cancelDown;
+}
+
+
+// ============================================================
+// PART C FUNCTIONS
+// ============================================================
+
+
+// ------------------------------------------------------------
+// SETUP 7-SEGMENT DISPLAY
+// ------------------------------------------------------------
+
+void setupPartCDisplay() {
+
+  for (int segment = 0; segment < 7; segment++) {
+
+    pinMode(PART_C_SEGMENT_PINS[segment], OUTPUT);
+  }
+
+  blankPartCDisplay();
+}
+
+
+// ------------------------------------------------------------
+// SET COUNTDOWN VALUE
+// ------------------------------------------------------------
+
+void setPartCCountdownValue(int seconds) {
+
+  // Constrain value to the valid range 0-9
+  partCCountdownStartValue = constrain(seconds, 0, 9);
+
+  partCDisplayedDigit = partCCountdownStartValue;
+
+  partCCountdownActive = false;
+
+  partCCountdownFinished = false;
+
+
+  // Show selected number
+  showPartCNumber(partCDisplayedDigit);
+}
+
+
+// ------------------------------------------------------------
+// START COUNTDOWN
+// ------------------------------------------------------------
+
+void startPartCCountdown() {
+
+  // Restart from selected value
+  partCDisplayedDigit = partCCountdownStartValue;
+
+  partCLastTickMs = millis();
+
+  partCCountdownFinished = false;
+
+
+  showPartCNumber(partCDisplayedDigit);
+
+
+  if (partCDisplayedDigit > 0) {
+
+    partCCountdownActive = true;
+  }
+
+  else {
+
+    partCCountdownActive = false;
+
+    partCCountdownFinished = true;
   }
 }
 
-void showSelectedColour() {
-  int row = lightShowIndex - 1;
-  
-  /* Pot now ONLY controls brightness, scaling between a minimum PWM floor
-  and full brightness (255) - this is unchanged from Part B */
 
-  int scale = map(analogRead(potPin), 0, 1023, minimumBrightnessPwm, 255);
-  int r = colourTable[row][0] * scale / 255;
-  int g = colourTable[row][1] * scale / 255;
-  int b = colourTable[row][2] * scale / 255;
+// ------------------------------------------------------------
+// UPDATE COUNTDOWN
+// ------------------------------------------------------------
+//
+// millis() is used instead of delay().
+//
+// This is important because the Arduino must continue checking
+// the reset button while the countdown is running.
+//
 
-  // Safety: if it becomes bright again mid-show (e.g. someone turns on a
-  // light), cut the LEDs rather than keep them lit in daylight.
-  if (ambientLightReading <= ldrThreshold) {
-    r = 0; g = 0; b = 0;
+void updatePartCCountdown() {
+
+  if (!partCCountdownActive) {
+
+    return;
   }
 
+
+  // One countdown step every 1000 ms
+  while (
+    partCCountdownActive &&
+    millis() - partCLastTickMs >= 1000UL
+  ) {
+
+    partCLastTickMs += 1000UL;
+
+    partCDisplayedDigit--;
+
+
+    // Update the 7-segment display
+    showPartCNumber(partCDisplayedDigit);
+
+
+    // Stop at zero
+    if (partCDisplayedDigit == 0) {
+
+      partCCountdownActive = false;
+
+      partCCountdownFinished = true;
+    }
+  }
+}
+
+
+// ------------------------------------------------------------
+// DISPLAY NUMBER
+// ------------------------------------------------------------
+//
+// The display is ACTIVE-LOW:
+//
+// LOW  = ON
+// HIGH = OFF
+//
+
+void showPartCNumber(int value) {
+
+  int safeValue = constrain(value, 0, 9);
+
+
+  for (int segment = 0; segment < 7; segment++) {
+
+    digitalWrite(
+      PART_C_SEGMENT_PINS[segment],
+      PART_C_DIGIT_MAP[safeValue][segment]
+    );
+  }
+}
+
+
+// ------------------------------------------------------------
+// BLANK DISPLAY
+// ------------------------------------------------------------
+
+void blankPartCDisplay() {
+
+  for (int segment = 0; segment < 7; segment++) {
+
+    digitalWrite(
+      PART_C_SEGMENT_PINS[segment],
+      HIGH
+    );
+  }
+}
+
+
+// ============================================================
+// PART B FUNCTIONS
+// ============================================================
+
+
+// ------------------------------------------------------------
+// UPDATE RGB COLOURS
+// ------------------------------------------------------------
+//
+// The potentiometer DOES NOT control this timing.
+//
+// The colour changes every 1000 ms.
+//
+// The potentiometer only changes PWM brightness.
+//
+
+void updateRGBColours() {
+
+  // Change colour once per second
+  if (millis() - lastColourChange >= colourChangeInterval) {
+
+    lastColourChange = millis();
+
+    currentColour++;
+
+
+    // Return to first colour after colour 4
+    if (currentColour >= 4) {
+
+      currentColour = 0;
+    }
+  }
+
+
+  // ----------------------------------------------------------
+  // READ POTENTIOMETER
+  // ----------------------------------------------------------
+
+  int potValue = analogRead(potPin);
+
+
+  // Convert potentiometer reading:
+  //
+  // 0    -> minimum brightness
+  // 1023 -> maximum brightness
+  //
+  int brightness = map(
+    potValue,
+    0,
+    1023,
+    minimumBrightnessPwm,
+    255
+  );
+
+
+  // ----------------------------------------------------------
+  // GET RGB VALUES FROM COLOUR TABLE
+  // ----------------------------------------------------------
+
+  int r = colourTable[currentColour][0];
+
+  int g = colourTable[currentColour][1];
+
+  int b = colourTable[currentColour][2];
+
+
+  // ----------------------------------------------------------
+  // APPLY BRIGHTNESS
+  // ----------------------------------------------------------
+  //
+  // Because this is a COMMON-CATHODE RGB LED,
+  // larger PWM values = greater brightness.
+  //
+
+  r = r * brightness / 255;
+
+  g = g * brightness / 255;
+
+  b = b * brightness / 255;
+
+
+  // Output PWM values
   analogWrite(redPin, r);
+
   analogWrite(greenPin, g);
+
   analogWrite(bluePin, b);
 }
 
-// PART C
+
+// ------------------------------------------------------------
+// TURN RGB LED OFF
+// ------------------------------------------------------------
+
+void turnOffRGB() {
+
+  analogWrite(redPin, 0);
+
+  analogWrite(greenPin, 0);
+
+  analogWrite(bluePin, 0);
 }
 
+
+// ============================================================
+// RESET FUNCTION
+// ============================================================
+//
+// This function centralises the reset behaviour.
+//
+// This avoids having different parts of the program trying to
+// reset different variables independently.
+//
+
+void resetSystem() {
+
+  // Return to idle state
+  systemState = 1;
+
+
+  // Reset selected countdown
+  sharedValue = 0;
+
+  partCCountdownStartValue = 0;
+
+  partCDisplayedDigit = 0;
+
+  partCCountdownActive = false;
+
+  partCCountdownFinished = false;
+
+
+  // Reset RGB colour cycle
+  currentColour = 0;
+
+  lastColourChange = millis();
+
+
+  // Turn RGB LED off
+  turnOffRGB();
+
+
+  // Blank display
+  blankPartCDisplay();
+
+
+  // Reset status LED
+  digitalWrite(statusLampPin, LOW);
+}
+
+
+// ============================================================
+// STATUS LED
+// ============================================================
+
+void updateStatusLamp() {
+
+  // ----------------------------------------------------------
+  // STATE 2 = MEASURING
+  // ----------------------------------------------------------
+
+  if (systemState == 2) {
+
+    // Flash every 200 ms
+    digitalWrite(
+      statusLampPin,
+      (millis() / 200) % 2
+    );
+  }
+
+
+  // ----------------------------------------------------------
+  // STATE 4 = RGB COLOUR CYCLING
+  // ----------------------------------------------------------
+
+  else if (systemState == 4) {
+
+    digitalWrite(statusLampPin, HIGH);
+  }
+
+
+  // ----------------------------------------------------------
+  // ALL OTHER STATES
+  // ----------------------------------------------------------
+
+  else {
+
+    digitalWrite(statusLampPin, LOW);
+  }
+}
