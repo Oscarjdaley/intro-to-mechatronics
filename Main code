@@ -1,11 +1,10 @@
 /* CODE BEHAVIOUR SUMMARY:
-Timer that runs for as long as you hold down the button. 
-Maximum of 9 seconds, holding for >9s; print release button message
-When timer runs down, light show with rgb 
-Potentiometer controls brightness 
-cancel button clears the board, resets system 
-Various status updates along the way to inform user 
-if both the button has been pressed and the photoresister senses no light (nighttime), then the countdown and LED code will start */
+if both the button has been pressed and the photoresister senses no light (nighttime), then the countdown and LED code will start 
+Timer that runs for as long as you hold down the button (Maximum of 9 seconds, otherwise serial monitor prints error holding for)
+When the Countdown reaches 0, the RGB LED lightshow starts & cycles through the 4 colours.
+Potentiometer controls brightness & speed of the colour cycle (high brightness & high cycle speed ---> low brightness & low cycle speed)
+Cancel button clears the board, resets system 
+Various status updates along the way to inform user */
 
 
 // PART A - pins & variables
@@ -153,7 +152,7 @@ void loop() {
 
     else 
     {
-      Serial.println("TOO BRIGHT: System will not start.");
+      Serial.println("TOO BRIGHT - System will not start.");
       Serial.println("Please make the environment darker.");
     }
   }
@@ -186,7 +185,7 @@ void loop() {
         sharedValue = 0;
         blankPartCDisplay();
 
-        Serial.println("HOLD TOO SHORT.");
+        Serial.println("HOLD TOO SHORT");
         Serial.println("Please hold the button for at least 1 second.");
     }
       else 
