@@ -97,6 +97,8 @@ void setup() {
 
   pinMode(armButtonPin, INPUT_PULLUP);
   pinMode(cancelButtonPin, INPUT_PULLUP);
+  pinMode(statusLampPin, OUTPUT);   // ADDED: status lamp from Part A
+  digitalWrite(statusLampPin, LOW); // ADDED: start with lamp off
 
 // part B
 
@@ -236,6 +238,8 @@ void loop() {
     updateRGBColours();
   }
 
+  updateStatusLamp(); // ADDED: drive the status lamp from Part A
+
 // part a - save button states
   armButtonWasDown = armDown;
   cancelButtonWasDown = cancelDown;
@@ -251,6 +255,23 @@ bool isDark() {
   Serial.println(ldrValue);
 
   return ldrValue < darkThreshold;
+}
+
+// ADDED: status lamp function from Part A, adapted to this sketch's states
+// state 1 = idle            -> lamp off
+// state 2 = measuring hold  -> lamp blinking
+// state 3 = countdown       -> lamp solid on
+// state 4 = colour cycling  -> lamp solid on
+void updateStatusLamp() {
+  if (systemState == 2) {
+    digitalWrite(statusLampPin, (millis() / 200) % 2);
+  }
+  else if (systemState == 3 || systemState == 4) {
+    digitalWrite(statusLampPin, HIGH);
+  }
+  else {
+    digitalWrite(statusLampPin, LOW);
+  }
 }
 
 // part C functions
@@ -413,4 +434,6 @@ void resetSystem()
   turnOffRGB();
 
   blankPartCDisplay();
+
+  digitalWrite(statusLampPin, LOW); // ADDED: make sure lamp is off on reset
 }
