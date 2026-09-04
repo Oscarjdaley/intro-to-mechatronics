@@ -241,18 +241,7 @@ void loop() {
 }
 
 
-// ============================================================
-// LDR FUNCTION
-// ============================================================
-//
-// Returns TRUE when the environment is dark.
-//
-// Your LDR produces a HIGHER reading when darker.
-// Therefore:
-// reading > darkThreshold = DARK
-//
-// ============================================================
-
+// LDR function
 bool isDark() {
 
   int ldrValue = analogRead(ldrPin);
