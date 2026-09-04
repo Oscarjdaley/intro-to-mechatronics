@@ -1,11 +1,12 @@
-Code Summary
-  Timer that runs for as long as you hold down the button. 
-  Maximum of 9 seconds, holding for >9s; print release button message
-  When timer runs down, light show with rgb 
-  Potentiometer controls brightness 
-  cancel button clears the board, resets system 
-  Various status updates along the way to inform user 
-  if both the button has been pressed and the photoresister sesnses no light (nighttime), then the countdown and LED code will start
+/* CODE BEHAVIOUR SUMMARY:
+Timer that runs for as long as you hold down the button. 
+Maximum of 9 seconds, holding for >9s; print release button message
+When timer runs down, light show with rgb 
+Potentiometer controls brightness 
+cancel button clears the board, resets system 
+Various status updates along the way to inform user 
+if both the button has been pressed and the photoresister senses no light (nighttime), then the countdown and LED code will start */
+
 
 // PART A - pins & variables
 
@@ -375,7 +376,12 @@ void blankPartCDisplay()
 
 void updateRGBColours() 
 {
-  if (millis() - lastColourChange >= colourChangeInterval) 
+  int potValue = analogRead(potPin); // MOVED UP: also needed below for cycle speed
+
+  // ADDED: map the pot reading to a colour-change interval (fast at one end, slow at the other)
+  unsigned long currentColourInterval = map(potValue, 0, 1023, 200, 2000);
+
+  if (millis() - lastColourChange >= currentColourInterval) // MODIFIED: was "colourChangeInterval" (fixed 1000ms), now pot-controlled
   {
     lastColourChange = millis();
 
@@ -387,9 +393,7 @@ void updateRGBColours()
     }
   }
 
-  int potValue = analogRead(potPin);
-
-  int brightness = map(potValue, 0, 1023, minimumBrightnessPwm, 255);
+  int brightness = map(potValue, 0, 1023, 255, minimumBrightnessPwm); // MODIFIED: inverted so brightness rises as cycle speeds up (matches speed mapping direction)
 
   int r = colourTable[currentColour][0];
   int g = colourTable[currentColour][1];
