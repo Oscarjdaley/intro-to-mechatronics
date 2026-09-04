@@ -11,6 +11,7 @@ Code Summary
 
 const int armButtonPin = 2;
 const int cancelButtonPin = 11;
+const int statusLampPin = 13;
 
 int systemState = 1;
 
