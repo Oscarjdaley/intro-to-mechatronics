@@ -41,6 +41,7 @@ const int potPin = A1;
 
 const int ldrPin = A2;
 const int darkThreshold = 800;
+const int minimumBrightnessPwm = 25;
 
 int colourTable[4][3] = {
   {0,   200, 40},
@@ -49,17 +50,11 @@ int colourTable[4][3] = {
   {255, 0,   0}
 };
 
-// Current colour in the cycle
-int currentColour = 0;
+int currentColour = 0;                // Current colour in the cycle\
+unsigned long lastColourChange = 0;   // Time at which the RGB LED colour was last changed
+const unsigned long colourChangeInterval = 1000;  // How long each colour remains on
 
-// Time at which the RGB LED colour was last changed
-unsigned long lastColourChange = 0;
-
-// How long each colour remains on
-const unsigned long colourChangeInterval = 1000;
-
-const int minimumBrightnessPwm = 25;
-
+// part C pins & variables
 const int PART_C_SEGMENT_PINS[7] = {4, 7, 8, 9, 10, 12, A0};
 
 const int PART_C_DIGIT_MAP[10][7] = 
@@ -392,7 +387,7 @@ void updateRGBColours()
     }
   }
 
-  int brightness = map(potValue, 0, 1023, 255, minimumBrightnessPwm); // MODIFIED: inverted so brightness rises as cycle speeds up (matches speed mapping direction)
+  int brightness = map(potValue, 0, 1023, 255, minimumBrightnessPwm);                                             // MODIFIED: inverted so brightness rises as cycle speeds up (matches speed mapping direction)
 
   int r = colourTable[currentColour][0];
   int g = colourTable[currentColour][1];
@@ -402,13 +397,12 @@ void updateRGBColours()
   g = g * brightness / 255;
   b = b * brightness / 255;
 
-  // Invert the values because common-anode is active-low (this also keeps the RGB LED off for other system states
+  // Invert the values because common-anode is active-low
   analogWrite(redPin, 255 - r);
   analogWrite(greenPin, 255 - g);
   analogWrite(bluePin, 255 - b);
 }
 
-// For a common anode RGB LED: 255 = off, 0 = on
 
 void turnOffRGB() 
 {
